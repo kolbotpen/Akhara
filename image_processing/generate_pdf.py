@@ -48,7 +48,7 @@ def load_word_list(word_list_path):
     with open(word_list_path, 'r') as f:
         reader = csv.DictReader(f)
         for row in reader:
-            words[int(row['id'])] = row['word']
+            words[int(row['id'])] = row['khmer_text']
     return words
 
 
@@ -58,16 +58,12 @@ def find_khmer_font():
     Returns font path or None.
     """
     font_paths = [
-        # First check for downloaded Noto Sans Khmer (best option)
         "fonts/NotoSansKhmer-Regular.ttf",
         "./fonts/NotoSansKhmer-Regular.ttf",
-        # System fonts (may not work well with PIL)
         "/usr/share/fonts/truetype/noto/NotoSansKhmer-Regular.ttf",
         "/usr/share/fonts/google-noto/NotoSansKhmer-Regular.ttf",
         "/Library/Fonts/Noto Sans Khmer.ttf",
         "C:\\Windows\\Fonts\\NotoSansKhmer-Regular.ttf",
-        # Fallback to system Khmer fonts (.ttc files don't work well)
-        # "/System/Library/Fonts/Supplemental/Khmer MN.ttc",
     ]
 
     for font_path in font_paths:
@@ -154,8 +150,9 @@ def render_text_as_image(text, font_size=6, font_path=None):
         return img
 
 
-def generate_pdf(word_list_path, output_pdf, num_words=10, font_size=6, 
-                 id_font_size=18, line_spacing=2.0, id_spacing=0.3, box_height=0.7, seed=None):
+def generate_pdf(word_list_path, output_pdf, num_words=10, font_size=6,
+                 id_font_size=18, line_spacing=2.0, id_spacing=0.3,
+                 box_width_px=960, box_height_px=384, target_dpi=300, seed=None):
     """
     Generate a PDF with random words from word list and handwriting boxes in 2-column layout.
     
@@ -167,7 +164,9 @@ def generate_pdf(word_list_path, output_pdf, num_words=10, font_size=6,
         id_font_size: Font size for ID numbers
         line_spacing: Vertical spacing between entries (in inches)
         id_spacing: Horizontal spacing between ID and word (in inches)
-        box_height: Height of handwriting box (in inches)
+        box_width_px: Handwriting box width in target pixels
+        box_height_px: Handwriting box height in target pixels
+        target_dpi: DPI used to convert target pixels to PDF points
         seed: Random seed for reproducibility
     
     Returns:
@@ -208,12 +207,18 @@ def generate_pdf(word_list_path, output_pdf, num_words=10, font_size=6,
     column_gap = 0.5 * inch
     y_start = height - 1 * inch
     
-    # Box parameters
-    box_width = 3.0 * inch
+    # Box parameters: convert desired pixel dimensions to PDF points.
+    # reportlab uses points (72 points = 1 inch).
+    box_width = (box_width_px / target_dpi) * inch
+    box_height = (box_height_px / target_dpi) * inch
     
     # Process words in 2-column layout (5 rows x 2 columns)
     rows_per_column = 5
     
+    # Draw text content first, then draw all box outlines at the end so
+    # no later word image can cover an earlier box border.
+    box_rects = []
+
     for idx, (word_id, word) in enumerate(selected_words):
         # Determine column and row
         col = idx // rows_per_column  # 0 for left column, 1 for right column
@@ -256,11 +261,14 @@ def generate_pdf(word_list_path, output_pdf, num_words=10, font_size=6,
         
         # Draw handwriting box below the text
         box_y = y_position - 0.25 * inch  # Small gap below text
-        box_bottom = box_y - (box_height * inch)
+        box_bottom = box_y - box_height
         
-        c.setStrokeColorRGB(0.3, 0.3, 0.3)  # Dark gray
-        c.setLineWidth(1)
-        c.rect(x_position, box_bottom, box_width, box_height * inch, fill=0)
+        box_rects.append((x_position, box_bottom, box_width, box_height))
+
+    c.setStrokeColorRGB(0.3, 0.3, 0.3)  # Dark gray
+    c.setLineWidth(1)
+    for x, y, w, h in box_rects:
+        c.rect(x, y, w, h, fill=0)
     
     c.save()
     
@@ -362,8 +370,10 @@ def main():
                         help='Font size for Khmer text')
     parser.add_argument('--id-font-size', type=int, default=18,
                         help='Font size for ID numbers')
-    parser.add_argument('--box-height', type=float, default=0.7,
-                        help='Height of handwriting box in inches')
+    parser.add_argument('--box-width-px', type=int, default=960,
+                        help='Handwriting box width in pixels at --dpi (default: 960)')
+    parser.add_argument('--box-height-px', type=int, default=384,
+                        help='Handwriting box height in pixels at --dpi (default: 384)')
     parser.add_argument('--seed', type=int, default=None,
                         help='Random seed for reproducibility')
     parser.add_argument('--convert-png', action='store_true',
@@ -392,7 +402,9 @@ def main():
         num_words=args.num_words,
         font_size=args.font_size,
         id_font_size=args.id_font_size,
-        box_height=args.box_height,
+        box_width_px=args.box_width_px,
+        box_height_px=args.box_height_px,
+        target_dpi=args.dpi,
         seed=args.seed
     )
     

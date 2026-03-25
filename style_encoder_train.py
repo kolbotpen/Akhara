@@ -23,6 +23,62 @@ import json
 import random
 
 
+"""
+    1. Image Processing Height too small. realistically 96-128px minimum
+    2. character_classes are hard coded from IAM transcriptions which only include ASCII not unicode endpoints
+    3. pad_token and padding_length is hardcoded
+    4. triplet sampling too tight. a will be consistently written but ក and  ្ក are the same consonant but will be written differently
+    5. affine transformation is tuned for Latin.
+    
+    proposed solutions:
+    4. lowering the margin will mean smaller gap differentiation between writer styles, instead of just lowering the margin, switch to a soft margin variant
+    ------------------------------------------------
+        criterion = nn.TripletMarginWithDistanceLoss(
+            distance_function=nn.PairwiseDistance(p=2),
+            margin=0.5,
+            swap=True  # uses the "best negative" trick, helps with hard negatives
+        )
+    ------------------------------------------------
+    5.  Option A:
+        disable the transformation for Khmer (safest option, doesn't distort the geometry)
+    ------------------------------------------------
+        # Instead of:
+        aug_transforms = [lambda x: affine_transformation(x, s=.1)]
+
+        # For Khmer, start with no geometric augmentation:
+        aug_transforms = []
+
+        train_transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        ])
+    ------------------------------------------------
+    ------------------------------------------------
+        Option B:
+        replace with Khmer-safe augmentations that don't distort vertical structure
+    ------------------------------------------------
+        train_transform = transforms.Compose([
+            transforms.RandomApply([
+                transforms.ColorJitter(brightness=0.3, contrast=0.3)
+            ], p=0.5),                          # safe — doesn't touch geometry
+            transforms.RandomApply([
+                transforms.GaussianBlur(kernel_size=3)
+            ], p=0.3),                          # simulates ink bleed, still safe
+            transforms.RandomApply([
+                transforms.RandomAffine(
+                    degrees=2,          # very small rotation only
+                    translate=(0.02, 0.0),  # tiny horizontal shift only
+                    shear=0,            # NO shear — this is what breaks subscripts
+                    scale=(0.95, 1.05)  # very mild scale
+                )
+            ], p=0.3),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        ])
+"""
+
+
+
 class AvgMeter:
     def __init__(self, name="Metric"):
         self.name = name
