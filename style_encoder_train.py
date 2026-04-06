@@ -370,6 +370,9 @@ class WordLineDataset(Dataset):
             print('Max transcription length: {}'.format(self.max_transcr_len))
             self.character_classes = res
             self.max_transcr_len = self.max_transcr_len
+        
+        if '<PAD>' not in self.character_classes:
+            self.character_classes.append('<PAD>')
         #END FINALIZE
 
     def __len__(self):
@@ -439,7 +442,7 @@ class WordLineDataset(Dataset):
         
             #image = image.resize((256, 64), Image.ANTIALIAS)
         if img.width < 256:
-            img = ImageOps.pad(img, size=(256, 64), color= "white")#, centering=(0,0)) uncommment to pad right
+            img = ImageOps.pad(img, size=(960, 384), color= "white")#, centering=(0,0)) uncommment to pad right
         #print('img', img.mode, img.size)
         
         pixel_values_img = img #self.processor(img, return_tensors="pt").pixel_values
@@ -486,13 +489,17 @@ class WordLineDataset(Dataset):
         
         char_tokens = [self.character_classes.index(c) for c in transcr]
         #print('char_tokens before', char_tokens)
-        pad_token = 79 
-        
-        #padding_length = self.max_transcr_len - len(char_tokens)
-        padding_length = 95 - len(char_tokens)
-        char_tokens.extend([pad_token] * padding_length)
-        
-        #char_tokens += [pad_token] * (self.max_transcr_len - len(char_tokens))
+        # # After building character_classes:
+        # pad_token_idx = self.character_classes.index('<PAD>')
+        # MAX_TRANSCR_LEN = 128
+        # padding_length = MAX_TRANSCR_LEN - len(char_tokens)
+        # char_tokens.extend([pad_token_idx] * padding_length)
+
+        # Khmer words/lines can be longer due to stacking — adjust accordingly
+        pad_token_idx = self.character_classes.index('<PAD>')
+        MAX_TRANSCR_LEN = 128
+        padding_length = MAX_TRANSCR_LEN - len(char_tokens)
+        char_tokens.extend([pad_token_idx] * padding_length)
         char_tokens = torch.tensor(char_tokens, dtype=torch.long)
         
         cla = self.character_classes
@@ -639,9 +646,10 @@ class LineListIO(object):
                 f.write(l + '\n')
 
 
+# FIXED — accept and forward character_classes
 class IAMDataset_style(WordLineDataset):
-    def __init__(self, basefolder, subset, segmentation_level, fixed_size, transforms):
-        super().__init__(basefolder, subset, segmentation_level, fixed_size, transforms)
+    def __init__(self, basefolder, subset, segmentation_level, fixed_size, transforms, character_classes=None):
+        super().__init__(basefolder, subset, segmentation_level, fixed_size, transforms, character_classes=character_classes)
         self.setname = 'IAM'
         self.trainset_file = '{}/{}/set_split/trainset.txt'.format(self.basefolder, self.setname)
         self.valset_file = '{}/{}/set_split/validationset1.txt'.format(self.basefolder, self.setname)
@@ -754,7 +762,7 @@ class IAMDataset_style(WordLineDataset):
                 #widths.append(img.size[0])
                 
             except:
-               continue
+                continue
                 
             #except:
             #    print('Could not add image file {}.png'.format(img_path))
@@ -847,7 +855,7 @@ def train_class_epoch(model, training_data, optimizer, args):
         
         loss = performance(output, label)
         _, preds = torch.max(output.data, 1)
- 
+
         loss.backward()
         optimizer.step()
         total_loss += loss.item() 
@@ -958,7 +966,7 @@ def val_epoch_triplet(val_loader, model, criterion, optimizer, device, args):
             wid = data[2]
             positive = data[3]
             negative = data[4]
-       
+
         anchor = img.to(device)
         positive = positive.to(device)
         negative = negative.to(device)
@@ -1115,9 +1123,9 @@ def train_classification(model, training_data, validation_data, optimizer, sched
 
         train_loss, train_acc = train_class_epoch(model, training_data, optimizer, args)
         print('Training: {loss: 8.5f} , accuracy: {accu:3.3f} %, '\
-              'elapse: {elapse:3.3f} min'.format(
-                  loss=train_loss, accu=100*train_acc,
-                  elapse=(time.time()-start)/60))
+                'elapse: {elapse:3.3f} min'.format(
+                    loss=train_loss, accu=100*train_acc,
+                    elapse=(time.time()-start)/60))
         
         start = time.time()
         model_state_dict = model.state_dict()
@@ -1170,9 +1178,86 @@ def train_triplet(model, train_loader, val_loader, criterion, optimizer, schedul
         
         scheduler.step(val_loss)
         
-        
+def get_khmer_character_classes():
+    """
+    Returns a curated list of Khmer Unicode characters for HTR training.
+    Covers the full Khmer Unicode block U+1780–U+17FF
+    """
+    
+    # Core Khmer consonants (U+1780–U+17A2)
+    consonants = [chr(c) for c in range(0x1780, 0x17A3)]
+    
+    # Independent vowels (U+17A3–U+17B3)
+    independent_vowels = [chr(c) for c in range(0x17A3, 0x17B4)]
+    
+    # Dependent vowel signs (U+17B6–U+17C5)
+    dependent_vowels = [chr(c) for c in range(0x17B6, 0x17C6)]
+    
+    # Various signs
+    signs = [chr(c) for c in range(0x17C6, 0x17D4)]
+    
+    # Punctuation (U+17D4–U+17DA)
+    punctuation = [chr(c) for c in range(0x17D4, 0x17DB)]
+    
+    # Currency symbol (Riel) U+17DB
+    currency = ['\u17DB']
+    
+    # Khmer digits (U+17E0–U+17E9)
+    digits = [chr(c) for c in range(0x17E0, 0x17EA)]
+    
+    # Khmer lunar digits (U+17F0–U+17F9)
+    lunar_digits = [chr(c) for c in range(0x17F0, 0x17FA)]
+    
+    # Subscript consonants (COENG form) — CRITICAL for Khmer
+    # These are the "foot" forms rendered below base consonants
+    # Represented as U+17D2 (COENG) + consonant sequences
+    # U+17D2 is the trigger character; include it explicitly
+    coeng = ['\u17D2']
+    
+    # Zero Width Non-Joiner / Zero Width Joiner (rendering control)
+    joiners = ['\u200B', '\u200C', '\u200D']
+    
+    # Space and padding
+    space = [' ']
+    
+    all_classes = (
+        consonants +
+        independent_vowels +
+        dependent_vowels +
+        signs +
+        punctuation +
+        currency +
+        digits +
+        lunar_digits +
+        coeng +
+        # joiners +   # not sure if using
+        space
+    )
+    
+    seen = set()
+    unique_classes = []
+    for c in all_classes:
+        if c not in seen:
+            seen.add(c)
+            unique_classes.append(c)
+    
+    return unique_classes
+
+def get_khmer_character_classes_with_coeng():
+    base = get_khmer_character_classes()
+    
+    # Generate all COENG + consonant bigrams as atomic tokens
+    coeng = '\u17D2'
+    consonants = [chr(c) for c in range(0x1780, 0x17A3)]
+    coeng_sequences = [coeng + c for c in consonants]
+    
+    # Remove standalone COENG since it's now always part of a bigram
+    base = [c for c in base if c != coeng]
+    
+    return base + coeng_sequences
 
 def main():
+    
     '''Main function'''
     parser = argparse.ArgumentParser(description='Train Style Encoder')
     parser.add_argument('--model', type=str, default='mobilenetv2_100', help='type of cnn to use (resnet, densenet, etc.)')
@@ -1209,8 +1294,11 @@ def main():
                             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) #transforms.Normalize((0.5,), (0.5,)),  #
                             ])
         
+        #get khmer classes
+        khmer_classes = get_khmer_character_classes_with_coeng()
+        
         #train_data = myDataset(dataset_folder, 'train', 'word', fixed_size=(1 * 64, 256), tokenizer=None, text_encoder=None, feat_extractor=None, transforms=train_transform, args=args)
-        train_data = myDataset(dataset_folder, 'train', 'word', fixed_size=(1 * 64, 256), transforms=train_transform)
+        train_data = myDataset(dataset_folder, 'train', 'word', fixed_size=(1 * 384, 960), transforms=train_transform, character_classes=khmer_classes)
         
         #print('len train data', len(train_data))
         #split with torch.utils.data.Subset into train and val
