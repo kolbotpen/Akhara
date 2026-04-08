@@ -237,7 +237,7 @@ def process_image(img_path, output_dir, writer_id, labels,
             continue
 
         resized  = crop_box(img, box)
-        out_name = f"{word_id}.png"
+        out_name = f"{word_id}_{writer_id}.png"
         out_path = output_dir / out_name
         cv2.imwrite(str(out_path), resized)
 

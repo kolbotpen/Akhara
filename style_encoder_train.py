@@ -198,7 +198,7 @@ class WordStyleDataset(Dataset):
         
         img = image_resize_PIL(img, height=int(1.0 * nheight), width=int(1.0 * nwidth))
         img = centered_PIL(img, (fheight, fwidth), border_value=255.0)
-       
+        
         img_pos = image_resize_PIL(img_pos, height=int(1.0 * nheight_pos), width=int(1.0 * nwidth_pos))
         img_pos = centered_PIL(img_pos, (fheight, fwidth), border_value=255.0)
         
@@ -350,14 +350,14 @@ class WordLineDataset(Dataset):
         self.initial_writer_ids = [d[2] for d in data]
         
         writer_ids,_  = np.unique([d[2] for d in data], return_inverse=True)
-       
+        
         self.writer_ids = writer_ids
         
         self.wclasses = len(writer_ids)
         print('Number of writers', self.wclasses)
         if self.character_classes is None:
             res = set()
-             #compute character classes given input transcriptions
+            #compute character classes given input transcriptions
             for _,transcr,_,_ in tqdm(data):
                 #print('legth transcr = ', len(transcr))
                 res.update(list(transcr))
@@ -640,7 +640,7 @@ class LineListIO(object):
         with io.open(file_path, mode, encoding=encoding) as f:
             if verbose:
                 line_list = tqdm.tqdm(line_list)
-              
+            
             for l in line_list:
                 #f.write(unicode(l) + '\n')   Python 2
                 f.write(l + '\n')
@@ -663,6 +663,7 @@ class IAMDataset_style(WordLineDataset):
         super().__finalize__()
 
     def main_loader(self, subset, segmentation_level) -> list:
+        # CHANGE BELOW CHANGE BELOW CHANGE BELOW CHANGE BELOW CHANGE BELOW CHANGE BELOW CHANGE BELOW 
         def gather_iam_info(self, set='train', level='word'):
             if subset == 'train':
                 #valid_set = np.loadtxt(self.trainset_file, dtype=str)
@@ -688,7 +689,8 @@ class IAMDataset_style(WordLineDataset):
                 raise ValueError
             gt = []
             form_writer_dict = {}
-            
+        # CHANGE ABOVE CHANGE ABOVE CHANGE ABOVE CHANGE ABOVE CHANGE ABOVE CHANGE ABOVE CHANGE ABOVE 
+        
             dict_path = f'./writers_dict_{subset}.json'
             #open dict file
             with open(dict_path, 'r') as f:
@@ -1298,7 +1300,7 @@ def main():
         khmer_classes = get_khmer_character_classes_with_coeng()
         
         #train_data = myDataset(dataset_folder, 'train', 'word', fixed_size=(1 * 64, 256), tokenizer=None, text_encoder=None, feat_extractor=None, transforms=train_transform, args=args)
-        train_data = myDataset(dataset_folder, 'train', 'word', fixed_size=(1 * 384, 960), transforms=train_transform, character_classes=khmer_classes)
+        train_data = myDataset(dataset_folder, 'train', 'word', fixed_size=(1 * 384, 960), transforms=train_transform)
         
         #print('len train data', len(train_data))
         #split with torch.utils.data.Subset into train and val
@@ -1380,7 +1382,7 @@ def main():
     
     
     if args.mode == 'triplet':
-        train(model, train_loader, val_loader, criterion, optimizer_ft, lr_scheduler, device, args)
+        train_triplet(model, train_loader, val_loader, criterion, optimizer_ft, lr_scheduler, device, args)
         print('finished training')
     
     
