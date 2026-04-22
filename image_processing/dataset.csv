@@ -1,21 +1,40 @@
 id,image_path,writer_id,label
-11,image_processing/processed_images/9_1.png,1,ធ្នើរសៀវភៅ
-12,image_processing/processed_images/14_1.png,1,ធ្នើរសៀវភៅ
-13,image_processing/processed_images/6_1.png,1,ធ្នើរសៀវភៅ
-14,image_processing/processed_images/4_1.png,1,ធ្នើរសៀវភៅ
-15,image_processing/processed_images/7_1.png,1,ធ្នើរសៀវភៅ
-16,image_processing/processed_images/12_1.png,1,ធ្នើរសៀវភៅ
-17,image_processing/processed_images/10_1.png,1,ធ្នើរសៀវភៅ
-18,image_processing/processed_images/11_1.png,1,ធ្នើរសៀវភៅ
-19,image_processing/processed_images/6_1.png,1,ធ្នើរសៀវភៅ
-20,image_processing/processed_images/3_1.png,1,ធ្នើរសៀវភៅ
-21,image_processing/processed_images/9_2.png,2,ធ្នើរសៀវភៅ
-22,image_processing/processed_images/14_2.png,2,ធ្នើរសៀវភៅ
-23,image_processing/processed_images/6_2.png,2,ធ្នើរសៀវភៅ
-24,image_processing/processed_images/4_2.png,2,ធ្នើរសៀវភៅ
-25,image_processing/processed_images/7_2.png,2,ធ្នើរសៀវភៅ
-26,image_processing/processed_images/12_2.png,2,ធ្នើរសៀវភៅ
-27,image_processing/processed_images/10_2.png,2,ធ្នើរសៀវភៅ
-28,image_processing/processed_images/11_2.png,2,ធ្នើរសៀវភៅ
-29,image_processing/processed_images/13_2.png,2,ធ្នើរសៀវភៅ
-30,image_processing/processed_images/3_2.png,2,ធ្នើរសៀវភៅ
+1,image_processing/processed_images/4333_1.png,1,ហុក ច័ន្ទដារិទ្ធ
+2,image_processing/processed_images/3464_1.png,1,សង សិទ្ធិស័ក្តិ
+3,image_processing/processed_images/317_1.png,1,ចន្ទ ទេព
+4,image_processing/processed_images/4290_1.png,1,ខេម សំ
+5,image_processing/processed_images/4840_1.png,1,ចុក សោភ័ណ
+6,image_processing/processed_images/2485_1.png,1,អ៊ុំ ណារី
+7,image_processing/processed_images/264_1.png,1,ប្រអប់
+8,image_processing/processed_images/3574_1.png,1,លី នី
+9,image_processing/processed_images/1434_1.png,1,អិម ជា
+10,image_processing/processed_images/4973_1.png,1,ឱ សម្ផស្ស
+11,image_processing/processed_images/848_1.png,1,អិម លីហ្សា
+12,image_processing/processed_images/675_1.png,1,រ៉េត វណ្ណា
+13,image_processing/processed_images/4017_1.png,1,ហុក សម្បត្តិ
+14,image_processing/processed_images/4828_1.png,1,សួន ធារិទ្ធ
+15,image_processing/processed_images/581_1.png,1,ស សារឿន
+16,image_processing/processed_images/4774_1.png,1,មួយ ពិសិដ្ឋ
+17,image_processing/processed_images/893_1.png,1,ខាយ មណី
+18,image_processing/processed_images/104_1.png,1,ម៉ាស៊ីនសម្ងួត
+19,image_processing/processed_images/3761_1.png,1,ម៉ៅ ស៊ី
+20,image_processing/processed_images/4639_1.png,1,ហាក់ ផល្លា
+21,image_processing/processed_images/4132_1.png,1,វង្ស កែវ
+22,image_processing/processed_images/3018_1.png,1,អាង ស្បោង
+23,image_processing/processed_images/3125_1.png,1,សម លី
+24,image_processing/processed_images/3729_1.png,1,ហេង លំអង
+25,image_processing/processed_images/4451_1.png,1,ជ័យ និមល
+26,image_processing/processed_images/943_1.png,1,ឆោម ចន្ថា
+28,image_processing/processed_images/4638_1.png,1,ទី សាវ៉ាន់
+29,image_processing/processed_images/1565_1.png,1,កែវ សារ៉េត
+30,image_processing/processed_images/1078_1.png,1,អ៊ុច ក្រម
+31,image_processing/processed_images/2463_1.png,1,ឆាយ ស៊ីណា
+32,image_processing/processed_images/3184_1.png,1,លីម ស៊ីវន
+33,image_processing/processed_images/4707_1.png,1,លីវ ឈូក
+34,image_processing/processed_images/1877_1.png,1,ទី គឹម
+35,image_processing/processed_images/4273_1.png,1,សាន់ មណី
+36,image_processing/processed_images/2855_1.png,1,អ៊ុយ ចន្ទ
+37,image_processing/processed_images/4151_1.png,1,ហុក ថាត់
+38,image_processing/processed_images/3303_1.png,1,ទិត្យ សុខា
+39,image_processing/processed_images/1389_1.png,1,ហ៊ុន ធី
+40,image_processing/processed_images/3638_1.png,1,ហាក់ រ៉ន

@@ -31,7 +31,6 @@ import csv
 import re
 import argparse
 from pathlib import Path
-from collections import Counter
 
 try:
     import pytesseract
@@ -146,35 +145,107 @@ def find_boxes(img_bgr):
 
 # ── OCR: read ID above the box ────────────────────────────────────────────────
 
-def _ocr_number(gray_roi):
-    """Try multiple preprocessing + PSM combos, majority-vote the result."""
-    hits = []
+def _ocr_number(gray_roi, valid_ids=None):
+    """Try multiple OCR passes and return the highest-confidence numeric candidate."""
+    expected_len = None
+    if valid_ids:
+        lengths = [len(str(v)) for v in valid_ids]
+        if lengths:
+            expected_len = max(set(lengths), key=lengths.count)
+
+    candidate_scores = {}
+
     for scale in [2, 3, 4]:
         up = cv2.resize(gray_roi, None, fx=scale, fy=scale,
                         interpolation=cv2.INTER_CUBIC)
-        _, th     = cv2.threshold(up, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        th_inv    = cv2.bitwise_not(th)
+        _, th = cv2.threshold(up, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        th_inv = cv2.bitwise_not(th)
+
         for variant in [th, th_inv]:
             padded = cv2.copyMakeBorder(variant, 20, 20, 20, 20,
                                         cv2.BORDER_CONSTANT, value=255)
-            for psm in [7, 8, 6]:
-                cfg  = f'--psm {psm} --oem 3 -c tessedit_char_whitelist=0123456789'
+
+            # Light denoise to stabilize OCR segmentation.
+            padded = cv2.medianBlur(padded, 3)
+
+            for psm in [7, 6, 8, 13]:
+                cfg = f'--psm {psm} --oem 3 -c tessedit_char_whitelist=0123456789'
                 try:
-                    text = pytesseract.image_to_string(padded, config=cfg).strip()
-                    m    = re.search(r'\d+', text)
-                    if m:
-                        hits.append(int(m.group()))
+                    data = pytesseract.image_to_data(
+                        padded,
+                        config=cfg,
+                        output_type=pytesseract.Output.DICT,
+                    )
+
+                    tokens = []
+                    for i, txt in enumerate(data['text']):
+                        digits = re.sub(r'\D', '', txt or '')
+                        if not digits:
+                            continue
+                        try:
+                            conf = float(data['conf'][i])
+                        except (ValueError, TypeError):
+                            conf = -1.0
+                        if conf < 0:
+                            continue
+                        try:
+                            num = int(digits)
+                        except ValueError:
+                            continue
+
+                        # Longer digit groups and higher confidence are preferred.
+                        score = conf + (len(digits) * 12)
+                        if expected_len is not None:
+                            score -= abs(len(digits) - expected_len) * 20
+                        candidate_scores[num] = max(candidate_scores.get(num, -1e9), score)
+                        tokens.append((int(data['left'][i]), digits, conf))
+
+                    # Combine left-to-right digit tokens into one line candidate (e.g. 4|2|9|0).
+                    if tokens:
+                        tokens.sort(key=lambda t: t[0])
+                        joined = ''.join(t[1] for t in tokens)
+                        if joined:
+                            joined_num = int(joined)
+                            avg_conf = sum(t[2] for t in tokens) / len(tokens)
+                            joined_score = avg_conf + (len(joined) * 14)
+                            if expected_len is not None:
+                                joined_score -= abs(len(joined) - expected_len) * 20
+                            candidate_scores[joined_num] = max(
+                                candidate_scores.get(joined_num, -1e9),
+                                joined_score,
+                            )
+
                 except Exception:
                     pass
-    return Counter(hits).most_common(1)[0][0] if hits else None
+
+    if not candidate_scores:
+        return None
+
+    # If label IDs are known, prefer OCR outputs that exist in labels.
+    if valid_ids:
+        for num in list(candidate_scores.keys()):
+            if num in valid_ids:
+                candidate_scores[num] += 12
+
+    # Final safety: if we know expected length, ignore much shorter results.
+    if expected_len is not None:
+        filtered = {
+            num: score for num, score in candidate_scores.items()
+            if len(str(num)) >= max(1, expected_len - 1)
+        }
+        if filtered:
+            candidate_scores = filtered
+
+    return max(candidate_scores.items(), key=lambda kv: kv[1])[0]
 
 
-def read_id_above_box(img_bgr, box):
+def read_id_above_box(img_bgr, box, valid_ids=None):
     """OCR the number printed above-left of the box."""
     if not OCR_AVAILABLE:
         return None
     x, y, w, h   = box
     ih, iw        = img_bgr.shape[:2]
+    # Use a wider OCR window above the box to avoid clipping digits.
     x1 = max(0,  x - 10)
     x2 = min(iw, x + w)
     y1 = max(0,  y - int(h * 1.2))
@@ -185,22 +256,71 @@ def read_id_above_box(img_bgr, box):
     roi  = img_bgr[y1:y2, x1:x2]
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
 
-    # Try left-third first (where the ID number sits), then full strip
+    # Try left-third first (where the ID number sits), then full strip.
     left = gray[:, : max(1, gray.shape[1] // 3)]
-    return _ocr_number(left) or _ocr_number(gray)
+    return _ocr_number(left, valid_ids=valid_ids) or _ocr_number(gray, valid_ids=valid_ids)
 
 
 # ── Crop + resize ─────────────────────────────────────────────────────────────
 
 def crop_box(img_bgr, box):
+    """Crop box with border removed, then tightly crop around detected drawing."""
     x, y, w, h = box
     ih, iw = img_bgr.shape[:2]
+    
+    # First, remove the printed border
     x1 = max(0,  x + BORDER_INSET)
     y1 = max(0,  y + BORDER_INSET)
     x2 = min(iw, x + w - BORDER_INSET)
     y2 = min(ih, y + h - BORDER_INSET)
     crop = img_bgr[y1:y2, x1:x2]
-    return cv2.resize(crop, (OUT_W, OUT_H), interpolation=cv2.INTER_LANCZOS4)
+    
+    # Add additional inset to skip any remaining border pixels
+    extra_inset = 20
+    eh, ew = crop.shape[:2]
+    ex1 = min(extra_inset, ew // 3)
+    ey1 = min(extra_inset, eh // 3)
+    ex2 = max(ew - extra_inset, ew * 2 // 3)
+    ey2 = max(eh - extra_inset, eh * 2 // 3)
+    inner_crop = crop[ey1:ey2, ex1:ex2]
+    
+    # Convert to grayscale and detect non-white content
+    gray = cv2.cvtColor(inner_crop, cv2.COLOR_BGR2GRAY)
+    
+    # Threshold to find dark pixels (handwriting)
+    _, binary = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
+    
+    # Find contours of the drawing content
+    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    if contours:
+        # Find bounding rectangle of all drawing content
+        all_points = np.vstack(contours)
+        content_x, content_y, content_w, content_h = cv2.boundingRect(all_points)
+        
+        # Add small margin (2px) to keep some breathing room
+        margin = 2
+        cx1 = max(0, content_x - margin)
+        cy1 = max(0, content_y - margin)
+        cx2 = min(inner_crop.shape[1], content_x + content_w + margin)
+        cy2 = min(inner_crop.shape[0], content_y + content_h + margin)
+        
+        # Map back to original crop coordinates
+        cx1 += ex1
+        cy1 += ey1
+        cx2 += ex1
+        cy2 += ey1
+        
+        # Ensure minimum size
+        if cx2 - cx1 > 10 and cy2 - cy1 > 10:
+            tight_crop = crop[cy1:cy2, cx1:cx2]
+        else:
+            tight_crop = crop
+    else:
+        # No content detected, use full crop
+        tight_crop = crop
+    
+    return cv2.resize(tight_crop, (OUT_W, OUT_H), interpolation=cv2.INTER_LANCZOS4)
 
 
 # ── Per-image processing ──────────────────────────────────────────────────────
@@ -230,10 +350,17 @@ def process_image(img_path, output_dir, writer_id, labels,
     new_rows  = []
     debug_img = img.copy() if debug else None
 
+    valid_ids = set(labels.keys()) if labels else None
+
     for i, box in enumerate(boxes):
-        word_id = read_id_above_box(img, box)
+        word_id = read_id_above_box(img, box, valid_ids=valid_ids)
         if word_id is None:
             print(f"   ⚠  box {i+1}: OCR could not read ID — skipping.")
+            continue
+
+        label = labels.get(word_id, '')
+        if not str(label).strip():
+            print(f"   ⚠  box {i+1}: word_id={word_id} has empty label — skipping.")
             continue
 
         resized  = crop_box(img, box)
@@ -241,7 +368,6 @@ def process_image(img_path, output_dir, writer_id, labels,
         out_path = output_dir / out_name
         cv2.imwrite(str(out_path), resized)
 
-        label = labels.get(word_id, '')
         row   = {
             'id':         auto_id,
             'image_path': str(out_path),
@@ -286,6 +412,8 @@ def main():
                         help='word_labels.csv from generate_pdf.py')
     parser.add_argument('--dataset-csv',     default='./image_processing/dataset.csv',
                         help='Dataset CSV to create or append to')
+    parser.add_argument('--writer-id',       default=None, type=int,
+                        help='Fixed writer_id to use for all images (overrides --writer-id-start)')
     parser.add_argument('--writer-id-start', default=1, type=int,
                         help='First writer_id to assign (increments per image file)')
     parser.add_argument('--debug',           action='store_true',
@@ -319,11 +447,17 @@ def main():
     print(f"✓ {len(images)} image(s) found")
     print(f"  Output size : {OUT_W}x{OUT_H}px")
     print(f"  Dataset CSV : {dataset_csv}  (appending)")
-    print(f"  writer_id   : {args.writer_id_start} .. {args.writer_id_start + len(images) - 1}")
+    if args.writer_id is not None:
+        print(f"  writer_id   : {args.writer_id} (fixed for all images)")
+    else:
+        print(f"  writer_id   : {args.writer_id_start} .. {args.writer_id_start + len(images) - 1}")
 
     total_saved = 0
     for i, img_path in enumerate(images):
-        writer_id    = args.writer_id_start + i
+        if args.writer_id is not None:
+            writer_id = args.writer_id
+        else:
+            writer_id = args.writer_id_start + i
         total_saved += process_image(
             img_path, output_dir,
             writer_id   = writer_id,

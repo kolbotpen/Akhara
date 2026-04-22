@@ -1,4 +1,7 @@
 .venv/
 .DS_Store
 .env
-__pycache__/*
+__pycache__/
+processed_images/
+images/
+pdfs_to_print/

@@ -356,7 +356,7 @@ def main():
         description='Generate PDFs with labeled words for handwriting dataset creation'
     )
     parser.add_argument('--word-list', '-w', 
-                        default='data/word_list.csv',
+                        default='dataset_generation/merged_corpus.csv',
                         help='Path to word list CSV (id,word columns)')
     parser.add_argument('--output-dir', '-d',
                         default='pdfs_to_print',

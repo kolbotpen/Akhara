@@ -5,6 +5,7 @@ from utils.auxilary_functions import image_resize_PIL, centered_PIL
 from PIL import Image, ImageOps
 import json
 import os
+import random
 import string
 
 class IAMDataset(WordLineDataset):
