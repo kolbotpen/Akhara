@@ -61,6 +61,7 @@ def load_labels(labels_csv):
 # ── Dataset CSV helpers ───────────────────────────────────────────────────────
 
 DATASET_FIELDS = ['id', 'image_path', 'writer_id', 'label']
+PROCESSED_MANIFEST = 'converted_sources.txt'
 
 
 def next_auto_id(dataset_csv: Path) -> int:
@@ -87,6 +88,21 @@ def append_rows(dataset_csv: Path, rows: list):
         if not file_exists:
             writer.writeheader()
         writer.writerows(rows)
+
+
+def load_processed_sources(manifest_path: Path) -> set[str]:
+    """Return the set of source image filenames that were already processed."""
+    if not manifest_path.exists():
+        return set()
+    with open(manifest_path, encoding='utf-8') as f:
+        return {line.strip() for line in f if line.strip()}
+
+
+def append_processed_source(manifest_path: Path, source_name: str):
+    """Record one processed source image filename."""
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(manifest_path, 'a', encoding='utf-8') as f:
+        f.write(f'{source_name}\n')
 
 
 # ── Box detection ─────────────────────────────────────────────────────────────
@@ -423,6 +439,7 @@ def main():
     output_dir  = Path(args.output_dir)
     images_dir  = Path(args.images_dir)
     dataset_csv = Path(args.dataset_csv)
+    manifest_csv = output_dir / PROCESSED_MANIFEST
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Load labels (gracefully handle missing file)
@@ -444,6 +461,10 @@ def main():
         print(f"✗ No images found in {images_dir}")
         return
 
+    processed_sources = load_processed_sources(manifest_csv)
+    if processed_sources:
+        print(f"  Skip list  : {len(processed_sources)} already-processed image(s)")
+
     print(f"✓ {len(images)} image(s) found")
     print(f"  Output size : {OUT_W}x{OUT_H}px")
     print(f"  Dataset CSV : {dataset_csv}  (appending)")
@@ -454,17 +475,26 @@ def main():
 
     total_saved = 0
     for i, img_path in enumerate(images):
+        if img_path.name in processed_sources:
+            print(f"\n── {img_path.name}")
+            print("   ✓ already processed — skipping.")
+            continue
+
         if args.writer_id is not None:
             writer_id = args.writer_id
         else:
             writer_id = args.writer_id_start + i
-        total_saved += process_image(
+        saved = process_image(
             img_path, output_dir,
             writer_id   = writer_id,
             labels      = labels,
             dataset_csv = dataset_csv,
             debug       = args.debug,
         )
+        total_saved += saved
+        if saved > 0:
+            append_processed_source(manifest_csv, img_path.name)
+            processed_sources.add(img_path.name)
 
     print(f"\n{'='*52}")
     print(f"  Done. {total_saved} crops saved.")

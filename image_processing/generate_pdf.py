@@ -52,6 +52,16 @@ def load_word_list(word_list_path):
     return words
 
 
+def sample_words(words, count):
+    """Return a list of (word_id, word_text) pairs for one page."""
+    word_ids = list(words.keys())
+    if count <= len(word_ids):
+        chosen_ids = random.sample(word_ids, count)
+    else:
+        chosen_ids = random.choices(word_ids, k=count)
+    return [(wid, words[wid]) for wid in chosen_ids]
+
+
 def find_khmer_font():
     """
     Find a Khmer-compatible font for PIL rendering.
@@ -150,7 +160,7 @@ def render_text_as_image(text, font_size=6, font_path=None):
         return img
 
 
-def generate_pdf(word_list_path, output_pdf, num_words=10, font_size=6,
+def generate_pdf(word_list_path, output_pdf, num_pages=1, num_words=10, font_size=6,
                  id_font_size=18, line_spacing=2.0, id_spacing=0.3,
                  box_width_px=960, box_height_px=384, target_dpi=300, seed=None):
     """
@@ -159,7 +169,8 @@ def generate_pdf(word_list_path, output_pdf, num_words=10, font_size=6,
     Args:
         word_list_path: Path to CSV file with id,word columns
         output_pdf: Path to save generated PDF
-        num_words: Number of random words to include
+        num_pages: Number of pages to generate
+        num_words: Number of random words per page
         font_size: Font size for Khmer text
         id_font_size: Font size for ID numbers
         line_spacing: Vertical spacing between entries (in inches)
@@ -194,10 +205,6 @@ def generate_pdf(word_list_path, output_pdf, num_words=10, font_size=6,
     
     words = load_word_list(word_list_path)
     
-    # randomly sample words
-    word_ids = random.sample(list(words.keys()), min(num_words, len(words)))
-    selected_words = [(wid, words[wid]) for wid in word_ids]
-    
     c = canvas.Canvas(output_pdf, pagesize=letter)
     width, height = letter
     
@@ -215,67 +222,79 @@ def generate_pdf(word_list_path, output_pdf, num_words=10, font_size=6,
     # Process words in 2-column layout (5 rows x 2 columns)
     rows_per_column = 5
     
-    # Draw text content first, then draw all box outlines at the end so
-    # no later word image can cover an earlier box border.
-    box_rects = []
+    all_selected_words = []
 
-    for idx, (word_id, word) in enumerate(selected_words):
-        # Determine column and row
-        col = idx // rows_per_column  # 0 for left column, 1 for right column
-        row = idx % rows_per_column   # 0-4 for each column
-        
-        # Calculate x position for this column
-        x_position = left_margin + (col * (column_width + column_gap))
-        
-        # Calculate y position for this row
-        y_position = y_start - (row * line_spacing * inch)
-        
-        # Draw ID (simple text, no complex rendering needed)
-        id_text = f"{word_id}"
-        c.setFont("Helvetica", id_font_size)
-        c.drawString(x_position, y_position, id_text)
-        
-        # Calculate ID width and word position
-        id_width = c.stringWidth(id_text, "Helvetica", id_font_size)
-        word_x = x_position + id_width + (id_spacing * inch)
-        
-        # Render Khmer word as image for proper display
-        word_img = render_text_as_image(word, font_size=font_size, font_path=khmer_font_path)
-        
-        # Convert PIL image to format ReportLab can use
-        img_buffer = io.BytesIO()
-        word_img.save(img_buffer, format='PNG')
-        img_buffer.seek(0)
-        img_reader = ImageReader(img_buffer)
-        
-        # Calculate image dimensions in PDF units (points)
-        img_width_pts = word_img.width * 0.75  # Convert pixels to points (roughly)
-        img_height_pts = word_img.height * 0.75
-        
-        # Draw image at calculated position
-        # Adjust y position slightly to align with baseline
-        img_y = y_position - (img_height_pts * 0.2)
-        c.drawImage(img_reader, word_x, img_y, 
-                   width=img_width_pts, height=img_height_pts, 
-                   preserveAspectRatio=True, mask='auto')
-        
-        # Draw handwriting box below the text
-        box_y = y_position - 0.25 * inch  # Small gap below text
-        box_bottom = box_y - box_height
-        
-        box_rects.append((x_position, box_bottom, box_width, box_height))
+    for page_number in range(1, num_pages + 1):
+        page_words = sample_words(words, num_words)
+        box_rects = []
 
-    c.setStrokeColorRGB(0.3, 0.3, 0.3)  # Dark gray
-    c.setLineWidth(1)
-    for x, y, w, h in box_rects:
-        c.rect(x, y, w, h, fill=0)
+        for idx, (word_id, word) in enumerate(page_words):
+            # Determine column and row
+            col = idx // rows_per_column  # 0 for left column, 1 for right column
+            row = idx % rows_per_column   # 0-4 for each column
+
+            # Calculate x position for this column
+            x_position = left_margin + (col * (column_width + column_gap))
+
+            # Calculate y position for this row
+            y_position = y_start - (row * line_spacing * inch)
+
+            # Draw ID (simple text, no complex rendering needed)
+            id_text = f"{word_id}"
+            c.setFont("Helvetica", id_font_size)
+            c.drawString(x_position, y_position, id_text)
+
+            # Calculate ID width and word position
+            id_width = c.stringWidth(id_text, "Helvetica", id_font_size)
+            word_x = x_position + id_width + (id_spacing * inch)
+
+            # Render Khmer word as image for proper display
+            word_img = render_text_as_image(word, font_size=font_size, font_path=khmer_font_path)
+
+            # Convert PIL image to format ReportLab can use
+            img_buffer = io.BytesIO()
+            word_img.save(img_buffer, format='PNG')
+            img_buffer.seek(0)
+            img_reader = ImageReader(img_buffer)
+
+            # Calculate image dimensions in PDF units (points)
+            img_width_pts = word_img.width * 0.75  # Convert pixels to points (roughly)
+            img_height_pts = word_img.height * 0.75
+
+            # Draw image at calculated position
+            # Adjust y position slightly to align with baseline
+            img_y = y_position - (img_height_pts * 0.2)
+            c.drawImage(img_reader, word_x, img_y,
+                       width=img_width_pts, height=img_height_pts,
+                       preserveAspectRatio=True, mask='auto')
+
+            # Draw handwriting box below the text
+            box_y = y_position - 0.25 * inch  # Small gap below text
+            box_bottom = box_y - box_height
+
+            box_rects.append((x_position, box_bottom, box_width, box_height))
+            all_selected_words.append({
+                'page': page_number,
+                'position': idx + 1,
+                'word_id': word_id,
+                'word_text': word,
+            })
+
+        c.setStrokeColorRGB(0.3, 0.3, 0.3)  # Dark gray
+        c.setLineWidth(1)
+        for x, y, w, h in box_rects:
+            c.rect(x, y, w, h, fill=0)
+
+        if page_number < num_pages:
+            c.showPage()
     
     c.save()
     
     print(f"Generated PDF: {output_pdf}")
-    print(f"Total words: {len(selected_words)}")
+    print(f"Pages: {num_pages}")
+    print(f"Total words: {len(all_selected_words)}")
     
-    return selected_words
+    return all_selected_words
 
 
 def pdf_to_png(pdf_path, png_path, dpi=300):
@@ -333,7 +352,26 @@ def append_metadata(selected_words, pdf_filename, metadata_csv='pdfs_to_print/wo
     """Append metadata to master CSV file"""
     metadata_path = Path(metadata_csv)
     metadata_path.parent.mkdir(exist_ok=True, parents=True)
-    
+
+    # Migrate legacy 4-column CSVs to the new page-aware schema.
+    if metadata_path.exists():
+        with open(metadata_path, 'r', newline='') as f:
+            rows = list(csv.reader(f))
+
+        if rows and rows[0] == ['pdf_file', 'word_id', 'word_text', 'position']:
+            migrated_rows = [['pdf_file', 'page', 'word_id', 'word_text', 'position']]
+            for row in rows[1:]:
+                if not row:
+                    continue
+                if len(row) >= 5:
+                    migrated_rows.append(row[:5])
+                elif len(row) == 4:
+                    migrated_rows.append([row[0], '1', row[1], row[2], row[3]])
+
+            with open(metadata_path, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerows(migrated_rows)
+
     # Check if file exists to determine if we need to write header
     file_exists = metadata_path.exists()
     
@@ -342,11 +380,17 @@ def append_metadata(selected_words, pdf_filename, metadata_csv='pdfs_to_print/wo
         
         # Write header if file is new
         if not file_exists:
-            writer.writerow(['pdf_file', 'word_id', 'word_text', 'position'])
+            writer.writerow(['pdf_file', 'page', 'word_id', 'word_text', 'position'])
         
         # Write data
-        for i, (word_id, word) in enumerate(selected_words):
-            writer.writerow([pdf_filename, word_id, word, i + 1])
+        for item in selected_words:
+            writer.writerow([
+                pdf_filename,
+                item['page'],
+                item['word_id'],
+                item['word_text'],
+                item['position'],
+            ])
     
     print(f"Appended metadata to: {metadata_path}")
 
@@ -364,8 +408,10 @@ def main():
     parser.add_argument('--output', '-o',
                         default=None,
                         help='Specific output PDF path (overrides auto-naming)')
+    parser.add_argument('--num-pages', '-p', type=int, default=1,
+                        help='Number of pages to generate in the PDF')
     parser.add_argument('--num-words', '-n', type=int, default=10,
-                        help='Number of words to include')
+                        help='Number of words to include per page')
     parser.add_argument('--font-size', type=int, default=6,
                         help='Font size for Khmer text')
     parser.add_argument('--id-font-size', type=int, default=18,
@@ -399,6 +445,7 @@ def main():
     selected_words = generate_pdf(
         args.word_list,
         output_pdf,
+        num_pages=args.num_pages,
         num_words=args.num_words,
         font_size=args.font_size,
         id_font_size=args.id_font_size,
